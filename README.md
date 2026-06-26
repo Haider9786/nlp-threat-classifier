@@ -2,7 +2,7 @@
 
 **Stack:** Python | Scikit-learn | NLTK | TF-IDF | Streamlit  
 **Domain:** Threat Intelligence | SOC Automation | NLP/ML  
-**Type:** Final Year Project — University of Chakwal (2025)
+
 
 ---
 
