@@ -1,203 +1,185 @@
 # NLP Threat Intelligence Text Classifier
 
-**Stack:** Python | Scikit-learn | NLTK | TF-IDF | Streamlit  
-**Domain:** Threat Intelligence | SOC Automation | NLP/ML  
-
+**Stack:** Python | scikit-learn | NLTK | TF-IDF | Streamlit | Docker | GitHub Actions
+**Domain:** Phishing Detection | NLP/ML | SOC Tooling
 
 ---
 
 ## Project Overview
 
-This project builds a machine learning classification pipeline that automatically categorises threat intelligence text into meaningful security categories. The motivation was a real SOC problem analysts spend significant time manually triaging unstructured threat intelligence feeds, phishing reports, and security bulletins. This classifier automates that triage step.
+A binary text classifier that labels email content as **Phishing** or **Safe** using classical NLP and machine learning. Built as a hands-on project to apply text preprocessing, TF-IDF feature extraction, and supervised model comparison to a real-world security use case, with a Streamlit interface for live demoing.
 
-The system processes raw threat intelligence text and classifies it into categories including phishing indicators, malware descriptions, network-based threats, and benign content. It was trained and evaluated on a dataset of 1,000+ labelled threat intelligence samples.
-
----
-
-## The SOC Problem This Solves
-
-In a real SOC environment, analysts receive threat intelligence from multiple feeds commercial threat intel platforms, open source feeds, email reports, and incident sharing communities. Each entry needs to be read, understood, and categorised before it can be actioned. For a busy SOC processing hundreds of entries daily, this is a significant manual workload.
-
-This classifier addresses that by:
-- Automatically tagging incoming threat intel by category
-- Flagging high-priority entries (phishing, active malware) for immediate analyst review
-- Filtering benign or low-confidence entries to reduce noise
-- Providing a foundation for SOAR integration and automated ticket creation
-
----
-
-## Architecture
-
-```
-Raw Threat Intelligence Text
-          |
-          v
-+------------------------+
-|   Text Preprocessing   |
-|   - Tokenisation       |
-|   - Stop word removal  |
-|   - Stemming (NLTK)    |
-+------------------------+
-          |
-          v
-+------------------------+
-|   Feature Extraction   |
-|   - TF-IDF Vectors     |
-|   - Bag of Words       |
-+------------------------+
-          |
-          v
-+------------------------+
-|   ML Classification    |
-|   - Naive Bayes        |
-|   - Logistic Regression|
-|   - SVM                |
-+------------------------+
-          |
-          v
-+------------------------+
-|   Streamlit Dashboard  |
-|   - Input text field   |
-|   - Category output    |
-|   - Confidence score   |
-+------------------------+
-```
+This is a portfolio/learning project, not a deployed production system. The README below reflects exactly what was built and measured — no aspirational numbers.
 
 ---
 
 ## Dataset
 
-- **Size:** 1,000+ labelled threat intelligence samples
-- **Sources:** Open source threat intelligence reports, CVE descriptions, phishing alert examples, security bulletins
-- **Categories:**
-  - Phishing:Email-based social engineering indicators
-  - Malware:Malicious software descriptions and IoCs
-  - Network Threat:Network-based attack indicators
-  - Vulnerability:CVE and exploit descriptions
-  - Benign:Non-threatening security content
+- **Source:** Kaggle  [`subhajournal/phishingemails`](https://www.kaggle.com/datasets/subhajournal/phishingemails)
+- **Size:** 18,650 raw rows → 18,634 after dropping rows with missing values
+- **Columns used:** `Email Text`, `Email Type` (mapped to binary label: 0 = Safe, 1 = Phishing)
+- **Label distribution:** 11,322 Safe / 7,312 Phishing
 
 ---
 
-## Technical Implementation
+## Pipeline
 
-### Preprocessing Pipeline
-
-```python
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer
-from sklearn.feature_extraction.text import TfidfVectorizer
-
-def preprocess(text):
-    # Tokenise
-    tokens = nltk.word_tokenize(text.lower())
-    # Remove stop words
-    tokens = [t for t in tokens if t not in stopwords.words('english')]
-    # Stem
-    stemmer = PorterStemmer()
-    tokens = [stemmer.stem(t) for t in tokens]
-    return ' '.join(tokens)
+```
+Raw email text (CSV)
+        |
+        v
+Preprocessing
+  - lowercase, strip URLs
+  - remove non-alphabetic characters
+  - remove stopwords, drop tokens <= 2 chars
+  - Porter stemming
+        |
+        v
+TF-IDF vectorization (max 5,000 features)
+        |
+        v
+Train/test split (80/20, stratified)
+        |
+        v
+GridSearchCV (5-fold, stratified) over:
+  - Multinomial Naive Bayes
+  - Logistic Regression
+  - Linear SVM
+        |
+        v
+Best model selected by held-out test accuracy
+        |
+        v
+Streamlit app for live classification
 ```
 
-### Feature Extraction
+---
 
-Two approaches were implemented and compared:
+## Results
 
-**TF-IDF (Term Frequency-Inverse Document Frequency)**
-Weights terms by how often they appear in a document relative to the whole corpus. Cybersecurity-specific terms like "exfiltration", "payload", "C2", and "lateral" score highly, making TF-IDF well-suited for threat intelligence text.
+All three models were tuned via `GridSearchCV` with 5-fold stratified cross-validation, then evaluated on a held-out 20% test set (3,726 samples).
 
-**Bag of Words**
-Simple word count vectorisation. Used as a baseline comparison against TF-IDF.
+| Model | Best Params | Test Accuracy | Precision (weighted) | Recall (weighted) | F1 (weighted) |
+|---|---|---|---|---|---|
+| Naive Bayes | alpha=1.0 | 95.81% | 0.96 | 0.96 | 0.96 |
+| **Logistic Regression** | **C=10.0** | **96.75%** | **0.97** | **0.97** | **0.97** |
+| Linear SVM | C=1.0 | 96.62% | 0.97 | 0.97 | 0.97 |
 
-### Model Comparison
+**Logistic Regression (C=10) was the best-performing model**, narrowly outperforming the tuned SVM. This was somewhat unexpected going in as SVM is the more commonly cited choice for TF-IDF text classification and only became clear after running cross-validation and a hyperparameter grid search rather than relying on default settings. It's a small but real example of why tuning rather than assuming matters.
 
-| Model | Accuracy | Precision | Recall | F1 Score |
-|---|---|---|---|---|
-| Naive Bayes + TF-IDF | 84% | 0.83 | 0.84 | 0.83 |
-| Logistic Regression + TF-IDF | 88% | 0.87 | 0.88 | 0.87 |
-| SVM + TF-IDF | 91% | 0.90 | 0.91 | 0.90 |
-| Naive Bayes + BoW | 79% | 0.78 | 0.79 | 0.78 |
+Confusion matrix (Logistic Regression, test set):
 
-SVM with TF-IDF achieved the best overall performance at 91% accuracy.
+```
+              Predicted Safe   Predicted Phishing
+Actual Safe        2186               78
+Actual Phishing      43             1419
+```
 
 ---
 
-## Streamlit Dashboard
-
-The classifier is wrapped in a Streamlit web application allowing analysts to paste threat intelligence text and receive an instant classification with confidence score.
-
-**Features:**
-- Text input field for raw threat intelligence
-- Category prediction with confidence percentage
-- Colour-coded output:red for high-priority threats, amber for medium, green for benign
-- Batch processing mode for CSV upload of multiple entries
-
----
-
-## SOC Integration Potential
-
-This classifier was designed with real SOC integration in mind:
-
-**SOAR Integration**
-The model can be wrapped as an API endpoint and called by SOAR platforms to automatically tag incoming threat intelligence before it reaches the analyst queue.
-
-**Splunk/Wazuh Integration**
-Output classifications can be fed back into SIEM platforms as enrichment fields on alerts, providing additional context during triage.
-
-**Threat Feed Automation**
-When connected to open source threat feeds like AlienVault OTX or MISP, the classifier can pre-process incoming IoCs and route them to the relevant analyst team automatically.
-
----
-
-## Files
+## Project Structure
 
 ```
 nlp-threat-classifier/
-├── README.md
+├── config.yaml                  # central config: paths, model params, CV folds
+├── requirements.txt
+├── setup.py                     # installable package (pip install -e .)
+├── Dockerfile
+├── .dockerignore
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # runs pytest on every push/PR to main
 ├── data/
-│   ├── threat_intel_dataset.csv
-│   └── labels.csv
-├── notebooks/
-│   ├── 01_preprocessing.ipynb
-│   ├── 02_feature_extraction.ipynb
-│   └── 03_model_comparison.ipynb
+│   ├── Phishing_Email.csv       # raw Kaggle dataset
+│   └── cleaned_dataset.csv      # generated by preprocess.py
 ├── src/
-│   ├── preprocess.py
-│   ├── train.py
-│   ├── predict.py
-│   └── app.py (Streamlit)
+│   └── threat_classifier/
+│       ├── __init__.py
+│       ├── utils.py             # config loader, logging setup
+│       ├── preprocess.py        # text cleaning pipeline
+│       ├── train.py             # CV + grid search + model training
+│       └── app.py               # Streamlit UI
+├── tests/
+│   ├── test_preprocess.py
+│   └── test_utils.py
 ├── models/
-│   └── svm_tfidf_model.pkl
-└── requirements.txt
+│   ├── best_model.pkl
+│   └── vectorizer.pkl
+└── logs/
+    └── app.log                  # generated at runtime
 ```
 
 ---
 
 ## How to Run
 
+### Local setup
+
 ```bash
-# Clone the repository
-git clone https://github.com/shahabminhas/nlp-threat-classifier
+git clone https://github.com/Haider9786/nlp-threat-classifier
+cd nlp-threat-classifier
 
-# Install dependencies
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
+
 pip install -r requirements.txt
-
-# Run the Streamlit app
-streamlit run src/app.py
+pip install -e .
 ```
+
+### Run the pipeline from scratch
+
+```bash
+python src\threat_classifier\preprocess.py   # cleans raw data -> data/cleaned_dataset.csv
+python src\threat_classifier\train.py        # trains + tunes models -> models/*.pkl
+streamlit run src\threat_classifier\app.py   # launches the web UI
+```
+
+### Run tests
+
+```bash
+pytest tests/ -v
+```
+
+### Docker
+
+A `Dockerfile` is included for reproducible builds:
+
+```bash
+docker build -t threat-classifier .
+docker run -p 8501:8501 threat-classifier
+```
+
+**Note:** the Docker build has not yet been verified end-to-end on this machine — if you hit issues, fall back to the local setup above and treat the Dockerfile as a work in progress.
+
+### CI
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs the test suite automatically on every push and pull request to `main`.
 
 ---
 
-## Lessons Learned
+## Engineering Notes
 
-**1. Domain-specific preprocessing matters**
-Generic stop word lists remove words like "not" which are semantically important in threat descriptions. Custom preprocessing that retains negations improved accuracy by approximately 4%.
+- **Config-driven, not hardcoded.** All paths, model hyperparameters, and CV settings live in `config.yaml` rather than being scattered through scripts.
+- **Logging over print statements.** Each script logs to both console and `logs/app.log` with timestamps and levels.
+- **Error handling.** Missing files, missing columns, and empty input are caught explicitly with clear messages rather than raw stack traces.
+- **Tested.** Core preprocessing logic (URL stripping, stopword removal, stemming, edge cases like `None`/empty input) and config loading are covered by unit tests.
+- **Packaged.** The codebase is installable (`pip install -e .`), so modules import cleanly (`from threat_classifier.preprocess import clean_text`) instead of relying on relative path hacks.
 
-**2. TF-IDF outperforms Bag of Words for threat intel**
-Because threat intelligence text is highly specialised, rare domain-specific terms carry disproportionate signal value. TF-IDF captures this; Bag of Words treats all terms equally.
+---
 
-**3. Class imbalance is a real challenge**
-Phishing samples significantly outnumbered other categories in the initial dataset. SMOTE oversampling was applied to balance the training set, which improved recall on underrepresented categories.
+## Honest Limitations
 
-**4. The bridge between ML and security is underexplored**
-Most cybersecurity practitioners are not machine learning engineers and most ML engineers do not understand threat intelligence workflows. Building this project gave me a perspective that sits at the intersection of both directly applicable to SOAR automation, anomaly detection, and AI-assisted SOC operations.
+- This is a **binary** classifier (Safe vs. Phishing) trained on a single public dataset. It has not been validated against live/real-world email traffic or adversarial phishing attempts designed to evade keyword-based features.
+- TF-IDF + linear models won't catch phishing that relies on visual/brand spoofing, attachment-based payloads, or sender-header anomalies — this project only looks at email body text.
+- No SOAR/SIEM integration exists; that's listed as a possible future direction, not a current feature.
+- The Docker image is defined but not yet confirmed to build and run cleanly — see note above.
+
+---
+
+## Possible Next Steps
+
+- Add a `predict.py` CLI for scripted/batch classification outside the Streamlit UI
+- Verify and document the Docker build
+- Try a held-out "hard examples" test set to probe robustness beyond the original Kaggle distribution
+- Explore lightweight transformer baselines (e.g. DistilBERT) as a comparison point against TF-IDF + linear models
