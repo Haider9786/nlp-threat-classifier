@@ -6,3 +6,5 @@ logs/
 *.egg-info/
 .vscode/
 data/archive.zip
+
+data/cleaned_dataset.csv
