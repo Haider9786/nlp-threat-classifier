@@ -1,0 +1,16 @@
+data:
+  raw_path: "data/Phishing_Email.csv"
+  cleaned_path: "data/cleaned_dataset.csv"
+
+model:
+  models_dir: "models"
+  best_model_path: "models/best_model.pkl"
+  vectorizer_path: "models/vectorizer.pkl"
+  max_features: 5000
+  test_size: 0.2
+  random_state: 42
+  cv_folds: 5
+
+logging:
+  level: "INFO"
+  log_file: "logs/app.log"
